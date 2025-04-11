@@ -281,6 +281,9 @@
                     </div>
                     
                     <div id="question-container" class="mb-8">
+                        <div id="question-media" class="mb-4 hidden">
+                            <!-- Media content will be inserted here -->
+                        </div>
                         <h3 id="question-text" class="text-xl font-bold text-gray-800 dark:text-white mb-4"></h3>
                         <div id="options-container" class="space-y-3">
                             <!-- Options will be added here dynamically -->
@@ -609,6 +612,8 @@
                 const questionText = questionData ? questionData.text : '';
                 const options = questionData ? questionData.options : ['', '', '', ''];
                 const correctAnswer = questionData ? questionData.correctAnswer : 0;
+                const mediaType = questionData ? (questionData.mediaType || '') : '';
+                const mediaData = questionData ? (questionData.mediaData || '') : '';
                 
                 questionDiv.innerHTML = `
                     <div class="flex justify-between items-start mb-4">
@@ -619,10 +624,40 @@
                             </svg>
                         </button>
                     </div>
+                    
                     <div class="mb-4">
+                        <label class="block text-gray-700 dark:text-gray-300 font-medium mb-2">فایل رسانه‌ای (اختیاری)</label>
+                        <div class="flex flex-col md:flex-row gap-4">
+                            <div class="flex-1">
+                                <select class="media-type w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                    <option value="" ${mediaType === '' ? 'selected' : ''}>بدون فایل رسانه‌ای</option>
+                                    <option value="image" ${mediaType === 'image' ? 'selected' : ''}>تصویر</option>
+                                    <option value="video" ${mediaType === 'video' ? 'selected' : ''}>ویدیو</option>
+                                    <option value="audio" ${mediaType === 'audio' ? 'selected' : ''}>صوت</option>
+                                    <option value="text" ${mediaType === 'text' ? 'selected' : ''}>متن</option>
+                                </select>
+                            </div>
+                            <div class="media-file-container flex-1 ${mediaType === '' ? 'hidden' : ''}">
+                                ${mediaType === 'image' || mediaType === 'video' || mediaType === 'audio' ? 
+                                    `<input type="file" class="media-file w-full px-4 py-1.5 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white file:mr-4 file:py-1 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 dark:file:bg-primary-900 dark:file:text-primary-300 hover:file:bg-primary-100 dark:hover:file:bg-primary-800">` : 
+                                    mediaType === 'text' ? 
+                                    `<textarea class="media-text w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white" rows="3">${mediaData}</textarea>` : 
+                                    ''}
+                            </div>
+                        </div>
+                        <div class="media-preview mt-3 ${!mediaData ? 'hidden' : ''}">
+                            ${mediaType === 'image' ? `<img src="${mediaData}" class="max-h-48 mx-auto rounded-lg border border-gray-200 dark:border-gray-700">` : ''}
+                            ${mediaType === 'video' ? `<video src="${mediaData}" controls class="max-h-48 mx-auto rounded-lg border border-gray-200 dark:border-gray-700"></video>` : ''}
+                            ${mediaType === 'audio' ? `<audio src="${mediaData}" controls class="w-full"></audio>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-gray-700 dark:text-gray-300 font-medium mb-2">متن سوال</label>
                         <input type="text" placeholder="متن سوال را وارد کنید..." value="${questionText}" required
                             class="question-text w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
+                    
                     <div class="mb-1">
                         <label class="block text-gray-700 dark:text-gray-300 font-medium mb-2">گزینه‌ها</label>
                         <div class="space-y-3 options-container">
@@ -645,6 +680,78 @@
                     questionDiv.remove();
                     updateQuestionNumbers();
                 });
+                
+                // Add event listener to media type select
+                const mediaTypeSelect = questionDiv.querySelector('.media-type');
+                const mediaFileContainer = questionDiv.querySelector('.media-file-container');
+                const mediaPreview = questionDiv.querySelector('.media-preview');
+                
+                mediaTypeSelect.addEventListener('change', function() {
+                    const mediaType = this.value;
+                    
+                    // Clear existing media input
+                    mediaFileContainer.innerHTML = '';
+                    mediaPreview.innerHTML = '';
+                    mediaPreview.classList.add('hidden');
+                    
+                    if (mediaType === '') {
+                        mediaFileContainer.classList.add('hidden');
+                    } else {
+                        mediaFileContainer.classList.remove('hidden');
+                        
+                        if (mediaType === 'text') {
+                            mediaFileContainer.innerHTML = `
+                                <textarea class="media-text w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white" rows="3"></textarea>
+                            `;
+                        } else {
+                            // For image, video, audio types
+                            mediaFileContainer.innerHTML = `
+                                <input type="file" class="media-file w-full px-4 py-1.5 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white file:mr-4 file:py-1 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 dark:file:bg-primary-900 dark:file:text-primary-300 hover:file:bg-primary-100 dark:hover:file:bg-primary-800">
+                            `;
+                            
+                            if (mediaType === 'image') {
+                                mediaFileContainer.querySelector('.media-file').accept = "image/*";
+                            } else if (mediaType === 'video') {
+                                mediaFileContainer.querySelector('.media-file').accept = "video/*";
+                            } else if (mediaType === 'audio') {
+                                mediaFileContainer.querySelector('.media-file').accept = "audio/*";
+                            }
+                            
+                            // Add event listener to file input
+                            mediaFileContainer.querySelector('.media-file').addEventListener('change', function() {
+                                if (this.files && this.files[0]) {
+                                    const file = this.files[0];
+                                    const reader = new FileReader();
+                                    
+                                    reader.onload = function(e) {
+                                        const fileData = e.target.result;
+                                        
+                                        mediaPreview.innerHTML = '';
+                                        mediaPreview.classList.remove('hidden');
+                                        
+                                        if (mediaType === 'image') {
+                                            mediaPreview.innerHTML = `<img src="${fileData}" class="max-h-48 mx-auto rounded-lg border border-gray-200 dark:border-gray-700">`;
+                                        } else if (mediaType === 'video') {
+                                            mediaPreview.innerHTML = `<video src="${fileData}" controls class="max-h-48 mx-auto rounded-lg border border-gray-200 dark:border-gray-700"></video>`;
+                                        } else if (mediaType === 'audio') {
+                                            mediaPreview.innerHTML = `<audio src="${fileData}" controls class="w-full"></audio>`;
+                                        }
+                                    };
+                                    
+                                    reader.readAsDataURL(file);
+                                }
+                            });
+                        }
+                    }
+                });
+                
+                // If there is existing media data, set up the text area change listener
+                if (mediaType === 'text' && mediaData) {
+                    const mediaTextarea = questionDiv.querySelector('.media-text');
+                    if (mediaTextarea) {
+                        mediaTextarea.value = mediaData;
+                    }
+                }
             }
             
             // Update question numbers after removing a question
@@ -734,6 +841,25 @@
                 // Update progress bar
                 const progressPercentage = ((index + 1) / currentQuiz.questions.length) * 100;
                 document.getElementById('progress-bar').style.width = `${progressPercentage}%`;
+                
+                // Show or hide media content
+                const mediaContainer = document.getElementById('question-media');
+                if (question.mediaType && question.mediaData) {
+                    mediaContainer.classList.remove('hidden');
+                    mediaContainer.innerHTML = '';
+                    
+                    if (question.mediaType === 'image') {
+                        mediaContainer.innerHTML = `<img src="${question.mediaData}" class="max-w-full max-h-80 mx-auto rounded-lg border border-gray-200 dark:border-gray-700">`;
+                    } else if (question.mediaType === 'video') {
+                        mediaContainer.innerHTML = `<video src="${question.mediaData}" controls class="max-w-full max-h-80 mx-auto rounded-lg border border-gray-200 dark:border-gray-700"></video>`;
+                    } else if (question.mediaType === 'audio') {
+                        mediaContainer.innerHTML = `<audio src="${question.mediaData}" controls class="w-full"></audio>`;
+                    } else if (question.mediaType === 'text') {
+                        mediaContainer.innerHTML = `<div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200">${question.mediaData}</div>`;
+                    }
+                } else {
+                    mediaContainer.classList.add('hidden');
+                }
                 
                 // Clear previous options
                 const optionsContainer = document.getElementById('options-container');
@@ -895,6 +1021,19 @@
                     const questionDiv = document.createElement('div');
                     questionDiv.className = `p-4 border ${isCorrect ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} rounded-lg`;
                     
+                    let mediaHTML = '';
+                    if (question.mediaType && question.mediaData) {
+                        if (question.mediaType === 'image') {
+                            mediaHTML = `<div class="mb-3"><img src="${question.mediaData}" class="max-h-48 mx-auto rounded-lg border border-gray-200 dark:border-gray-700"></div>`;
+                        } else if (question.mediaType === 'video') {
+                            mediaHTML = `<div class="mb-3"><video src="${question.mediaData}" controls class="max-h-48 mx-auto rounded-lg border border-gray-200 dark:border-gray-700"></video></div>`;
+                        } else if (question.mediaType === 'audio') {
+                            mediaHTML = `<div class="mb-3"><audio src="${question.mediaData}" controls class="w-full"></audio></div>`;
+                        } else if (question.mediaType === 'text') {
+                            mediaHTML = `<div class="mb-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200">${question.mediaData}</div>`;
+                        }
+                    }
+                    
                     questionDiv.innerHTML = `
                         <div class="flex items-start">
                             <div class="flex-shrink-0 mr-3">
@@ -907,6 +1046,7 @@
                             </div>
                             <div class="flex-1">
                                 <h4 class="font-bold text-gray-800 dark:text-white mb-2">سوال ${index + 1}: ${question.text}</h4>
+                                ${mediaHTML}
                                 <div class="space-y-2 mb-2">
                                     ${question.options.map((option, optIndex) => `
                                         <div class="flex items-center">
@@ -1150,6 +1290,35 @@
                 document.getElementById('start-quiz-btn').disabled = !document.getElementById('participant-name').value;
             }
             
+            // Get media data from question elements
+            function getMediaDataFromQuestion(questionEl) {
+                const mediaType = questionEl.querySelector('.media-type').value;
+                let mediaData = '';
+                
+                if (mediaType === 'text') {
+                    const textArea = questionEl.querySelector('.media-text');
+                    if (textArea) {
+                        mediaData = textArea.value;
+                    }
+                } else if (mediaType && mediaType !== '') {
+                    const preview = questionEl.querySelector('.media-preview');
+                    if (preview && !preview.classList.contains('hidden')) {
+                        if (mediaType === 'image') {
+                            const img = preview.querySelector('img');
+                            if (img) mediaData = img.src;
+                        } else if (mediaType === 'video') {
+                            const video = preview.querySelector('video');
+                            if (video) mediaData = video.src;
+                        } else if (mediaType === 'audio') {
+                            const audio = preview.querySelector('audio');
+                            if (audio) mediaData = audio.src;
+                        }
+                    }
+                }
+                
+                return { mediaType, mediaData };
+            }
+            
             // Initialize the application
             function init() {
                 // Check for quiz code in URL
@@ -1225,10 +1394,15 @@
                         const options = Array.from(questionEl.querySelectorAll('.option-text')).map(opt => opt.value);
                         const correctAnswer = parseInt(questionEl.querySelector('input[type="radio"]:checked').value);
                         
+                        // Get media data
+                        const { mediaType, mediaData } = getMediaDataFromQuestion(questionEl);
+                        
                         questions.push({
                             text: questionText,
                             options: options,
-                            correctAnswer: correctAnswer
+                            correctAnswer: correctAnswer,
+                            mediaType: mediaType,
+                            mediaData: mediaData
                         });
                     });
                     
