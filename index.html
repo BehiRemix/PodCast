@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>آزمون‌ساز حرفه‌ای</title>
+    <title>آزمون‌ساز حرفه‌ای با SQLite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/@tailwindcss/forms@0.5.3/dist/forms.min.css" rel="stylesheet">
+    <!-- SQL.js برای پیاده‌سازی SQLite در مرورگر -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -61,6 +63,53 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+        
+        /* سفارشی سازی scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .dark ::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4B5563;
+        }
+        
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6B7280;
+        }
+        
+        /* استایل‌های سفارشی برای نمایش فایل */
+        .file-preview {
+            max-width: 100%;
+            max-height: 200px;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .option-container:hover {
+            background-color: rgba(139, 92, 246, 0.05);
+        }
+        
+        .dark .option-container:hover {
+            background-color: rgba(139, 92, 246, 0.1);
+        }
     </style>
 </head>
 <body class="bg-white dark:bg-gray-900 min-h-screen">
@@ -70,8 +119,14 @@
             <p class="text-gray-600 dark:text-gray-300">ساخت، اشتراک‌گذاری و مدیریت آزمون‌ها به سادگی</p>
         </header>
 
+        <!-- نمایش لودینگ هنگام آماده‌سازی دیتابیس -->
+        <div id="loading-view" class="text-center p-10">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600 dark:border-primary-500 mb-4"></div>
+            <p class="text-gray-600 dark:text-gray-300">در حال آماده‌سازی دیتابیس...</p>
+        </div>
+
         <!-- Views Container -->
-        <div id="views">
+        <div id="views" class="hidden">
             <!-- Home View -->
             <div id="home-view" class="fade-in">
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
@@ -108,7 +163,7 @@
                             </svg>
                         </div>
                         <h3 class="text-xl font-bold text-center text-gray-800 dark:text-white mb-2">به اشتراک‌گذاری</h3>
-                        <p class="text-gray-600 dark:text-gray-300 text-center">لینک آزمون را با دیگران به اشتراک بگذارید تا در آن شرکت کنند.</p>
+                        <p class="text-gray-600 dark:text-gray-300 text-center">کد آزمون را با دیگران به اشتراک بگذارید تا در آن شرکت کنند.</p>
                     </div>
                     
                     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
@@ -164,7 +219,7 @@
                         
                         <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
                             <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-4">تنظیمات آزمون</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <label for="quiz-time" class="block text-gray-700 dark:text-gray-300 font-medium mb-2">مدت زمان آزمون (دقیقه)</label>
                                     <input type="number" id="quiz-time" name="quiz-time" min="1" value="30"
@@ -174,6 +229,15 @@
                                     <label for="quiz-passing-score" class="block text-gray-700 dark:text-gray-300 font-medium mb-2">نمره قبولی (درصد)</label>
                                     <input type="number" id="quiz-passing-score" name="quiz-passing-score" min="0" max="100" value="60"
                                         class="w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                </div>
+                                <div>
+                                    <label for="quiz-attempts" class="block text-gray-700 dark:text-gray-300 font-medium mb-2">محدودیت شرکت در آزمون</label>
+                                    <select id="quiz-attempts" name="quiz-attempts" 
+                                        class="w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                                        <option value="1">فقط یک بار</option>
+                                        <option value="10">10 بار</option>
+                                        <option value="0" selected>بدون محدودیت</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -200,7 +264,7 @@
                     </div>
                     
                     <div id="quiz-entry-form">
-                        <p class="text-gray-600 dark:text-gray-300 mb-6">برای شرکت در آزمون، کد آزمون را وارد کنید یا لینک آزمون را بازکنید.</p>
+                        <p class="text-gray-600 dark:text-gray-300 mb-6">برای شرکت در آزمون، کد آزمون را وارد کنید.</p>
                         
                         <div class="flex flex-col md:flex-row gap-4">
                             <div class="flex-1">
@@ -251,7 +315,16 @@
                                     </svg>
                                     <span id="quiz-info-passing">نمره قبولی: <span class="font-medium"></span>%</span>
                                 </div>
+                                <div class="flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                    </svg>
+                                    <span id="quiz-info-attempts">محدودیت شرکت: <span class="font-medium"></span></span>
+                                </div>
                             </div>
+                        </div>
+                        <div id="attempts-error" class="hidden mt-4 p-4 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 rounded-lg">
+                            <p class="font-bold">شما قبلاً در این آزمون شرکت کرده‌اید و به حداکثر تعداد دفعات مجاز رسیده‌اید.</p>
                         </div>
                     </div>
                 </div>
@@ -410,6 +483,12 @@
                             </div>
                             <div class="flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                </svg>
+                                <span>محدودیت شرکت: <span id="quiz-details-attempts" class="font-medium"></span></span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                 </svg>
                                 <span>تعداد شرکت‌کنندگان: <span id="quiz-details-participants" class="font-medium">0</span></span>
@@ -417,18 +496,25 @@
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div class="bg-white dark:bg-gray-700 rounded-lg shadow p-4 text-center">
                             <div class="text-xl font-bold text-gray-800 dark:text-white">کد آزمون</div>
                             <div id="quiz-details-code" class="mt-2 bg-gray-100 dark:bg-gray-600 p-2 rounded font-mono text-primary-600 dark:text-primary-300"></div>
+                            <button id="copy-code-from-details-btn" class="mt-3 bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                کپی کد
+                            </button>
+                            <button id="share-quiz-btn" class="mt-3 mr-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                اشتراک‌گذاری
+                            </button>
                         </div>
-                        <div class="bg-white dark:bg-gray-700 rounded-lg shadow p-4 text-center col-span-2">
-                            <div class="text-xl font-bold text-gray-800 dark:text-white">لینک آزمون</div>
-                            <div class="mt-2 relative">
-                                <input id="quiz-details-link" type="text" readonly
-                                    class="w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-white font-mono pr-28">
-                                <button id="copy-link-btn" class="absolute left-1 top-1 bg-primary-600 hover:bg-primary-700 text-white font-bold py-1 px-4 rounded text-sm">
-                                    کپی لینک
+                        <div class="bg-white dark:bg-gray-700 rounded-lg shadow p-4">
+                            <div class="text-xl font-bold text-gray-800 dark:text-white text-center mb-2">عملیات</div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <button id="export-quiz-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                                    دانلود دیتابیس
+                                </button>
+                                <button id="delete-quiz-from-details-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                                    حذف آزمون
                                 </button>
                             </div>
                         </div>
@@ -480,27 +566,16 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                         </svg>
                         <h3 id="share-quiz-title" class="text-xl font-bold text-gray-800 dark:text-white mb-2"></h3>
-                        <p class="text-gray-600 dark:text-gray-300 mb-6">آزمون خود را با دوستان و همکلاسی‌های خود به اشتراک بگذارید</p>
+                        <p class="text-gray-600 dark:text-gray-300 mb-6">کد آزمون را با شرکت‌کنندگان به اشتراک بگذارید</p>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                        <div class="bg-white dark:bg-gray-700 rounded-lg shadow p-4 text-center">
-                            <div class="text-xl font-bold text-gray-800 dark:text-white">کد آزمون</div>
-                            <div id="share-quiz-code" class="mt-2 bg-gray-100 dark:bg-gray-600 p-2 rounded font-mono text-primary-600 dark:text-primary-300"></div>
-                            <button id="copy-code-btn" class="mt-3 bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded text-sm">
-                                کپی کد
-                            </button>
-                        </div>
-                        <div class="bg-white dark:bg-gray-700 rounded-lg shadow p-4 text-center">
-                            <div class="text-xl font-bold text-gray-800 dark:text-white">لینک آزمون</div>
-                            <div class="mt-2 relative">
-                                <input id="share-quiz-link" type="text" readonly
-                                    class="w-full px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-white font-mono pr-24">
-                                <button id="copy-share-link-btn" class="absolute left-1 top-1 bg-primary-600 hover:bg-primary-700 text-white font-bold py-1 px-4 rounded text-sm">
-                                    کپی لینک
-                                </button>
-                            </div>
-                        </div>
+                    <div class="bg-white dark:bg-gray-700 rounded-lg shadow p-8 text-center mb-8">
+                        <div class="text-xl font-bold text-gray-800 dark:text-white mb-4">کد آزمون</div>
+                        <div id="share-quiz-code" class="mb-4 p-6 rounded font-mono text-4xl text-primary-600 dark:text-primary-300 bg-gray-100 dark:bg-gray-600"></div>
+                        <p class="text-gray-600 dark:text-gray-400 mb-4">برای شرکت در آزمون، کد بالا را به شرکت‌کنندگان ارائه دهید</p>
+                        <button id="copy-code-btn" class="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-6 rounded-lg text-base">
+                            کپی کد آزمون
+                        </button>
                     </div>
                     
                     <div class="text-center">
@@ -537,11 +612,113 @@
             let currentQuiz = null;
             let currentQuestion = 0;
             let userAnswers = [];
+            let answeredQuestions = []; // Keep track of answered questions
             let quizStartTime = null;
             let quizEndTime = null;
             let quizTimer = null;
             let quizDuration = 0;
             let timeRemaining = 0;
+            let SQL = null;
+            let db = null;
+            let sqljsConfig = {
+                locateFile: filename => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${filename}`
+            };
+            
+            // Initialize SQL.js
+            initSqlJs(sqljsConfig).then(function(sql) {
+                SQL = sql;
+                
+                // Create a new database
+                db = new SQL.Database();
+                
+                // Initialize the database schema
+                initDatabase();
+                
+                // Hide loading view and show main views
+                document.getElementById('loading-view').classList.add('hidden');
+                document.getElementById('views').classList.remove('hidden');
+                
+                // Initially show home view
+                switchView('home-view');
+                
+                // Initialize the app (attach event listeners, etc.)
+                init();
+                
+                console.log("Database initialized successfully!");
+            }).catch(err => {
+                console.error("Error initializing SQL.js:", err);
+                showAlert("خطا در بارگیری پایگاه داده. لطفا صفحه را مجدداً بارگذاری کنید.", "error");
+            });
+            
+            // Initialize database schema
+            function initDatabase() {
+                // Create quizzes table
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS quizzes (
+                        id TEXT PRIMARY KEY,
+                        code TEXT UNIQUE NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT,
+                        time INTEGER NOT NULL,
+                        passingScore INTEGER NOT NULL,
+                        maxAttempts INTEGER DEFAULT 0,
+                        createdAt TEXT NOT NULL
+                    )
+                `);
+                
+                // Create questions table
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS questions (
+                        id TEXT PRIMARY KEY,
+                        quizId TEXT NOT NULL,
+                        text TEXT NOT NULL,
+                        mediaType TEXT,
+                        mediaData TEXT,
+                        position INTEGER NOT NULL,
+                        FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE
+                    )
+                `);
+                
+                // Create options table
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS options (
+                        id TEXT PRIMARY KEY,
+                        questionId TEXT NOT NULL,
+                        text TEXT NOT NULL,
+                        isCorrect INTEGER NOT NULL,
+                        position INTEGER NOT NULL,
+                        FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE
+                    )
+                `);
+                
+                // Create participants table
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS participants (
+                        id TEXT PRIMARY KEY,
+                        quizId TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        score INTEGER NOT NULL,
+                        totalQuestions INTEGER NOT NULL,
+                        timeSpent INTEGER NOT NULL,
+                        passed INTEGER NOT NULL,
+                        date TEXT NOT NULL,
+                        FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE
+                    )
+                `);
+                
+                // Create answers table
+                db.run(`
+                    CREATE TABLE IF NOT EXISTS answers (
+                        participantId TEXT NOT NULL,
+                        questionId TEXT NOT NULL,
+                        optionId TEXT,
+                        FOREIGN KEY (participantId) REFERENCES participants(id) ON DELETE CASCADE,
+                        FOREIGN KEY (questionId) REFERENCES questions(id) ON DELETE CASCADE,
+                        FOREIGN KEY (optionId) REFERENCES options(id) ON DELETE CASCADE,
+                        PRIMARY KEY (participantId, questionId)
+                    )
+                `);
+            }
             
             // Helper function to generate a unique ID
             function generateUniqueId() {
@@ -549,6 +726,11 @@
                     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
                     return v.toString(16);
                 });
+            }
+            
+            // Helper function to generate a quiz code
+            function generateQuizCode() {
+                return Math.random().toString(36).substring(2, 8).toUpperCase();
             }
             
             // Helper function to format date
@@ -610,12 +792,11 @@
                 questionDiv.dataset.index = questionIndex;
                 
                 const questionText = questionData ? questionData.text : '';
-                const options = questionData ? questionData.options : ['', '', '', ''];
-                const correctAnswer = questionData ? questionData.correctAnswer : 0;
                 const mediaType = questionData ? (questionData.mediaType || '') : '';
                 const mediaData = questionData ? (questionData.mediaData || '') : '';
                 
-                questionDiv.innerHTML = `
+                // Build HTML for the question
+                let html = `
                     <div class="flex justify-between items-start mb-4">
                         <label class="block text-gray-700 dark:text-gray-300 font-medium">سوال ${questionIndex + 1}</label>
                         <button type="button" class="text-red-500 hover:text-red-700 remove-question-btn">
@@ -659,26 +840,103 @@
                     </div>
                     
                     <div class="mb-1">
-                        <label class="block text-gray-700 dark:text-gray-300 font-medium mb-2">گزینه‌ها</label>
-                        <div class="space-y-3 options-container">
-                            ${options.map((option, idx) => `
-                                <div class="flex items-center">
-                                    <input type="radio" name="correct-option-${questionIndex}" value="${idx}" ${idx === correctAnswer ? 'checked' : ''}
-                                        class="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600">
-                                    <input type="text" placeholder="گزینه ${idx + 1}" value="${option}"
-                                        class="option-text ml-2 flex-1 px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                                </div>
-                            `).join('')}
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-gray-700 dark:text-gray-300 font-medium">گزینه‌ها</label>
+                            <div class="options-count text-gray-600 dark:text-gray-400 text-sm">تعداد گزینه‌ها: <span>4</span>/10</div>
                         </div>
+                        <div class="space-y-3 options-container">`;
+                
+                // Adding options
+                const options = questionData && questionData.options ? questionData.options : [{ text: '', isCorrect: true }, { text: '', isCorrect: false }, { text: '', isCorrect: false }, { text: '' , isCorrect: false }];
+                
+                options.forEach((option, idx) => {
+                    html += `
+                        <div class="flex items-center option-container">
+                            <input type="radio" name="correct-option-${questionIndex}" value="${idx}" ${option.isCorrect ? 'checked' : ''}
+                                class="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600">
+                            <input type="text" placeholder="گزینه ${idx + 1}" value="${option.text}"
+                                class="option-text ml-2 flex-1 px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            ${idx > 1 ? `
+                            <button type="button" class="remove-option-btn ml-2 text-red-500 hover:text-red-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                        <button type="button" class="add-option-btn mt-3 inline-flex items-center text-primary-600 dark:text-primary-400 font-medium ${options.length >= 10 ? 'hidden' : ''}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            افزودن گزینه
+                        </button>
                     </div>
                 `;
                 
+                questionDiv.innerHTML = html;
                 questionsContainer.appendChild(questionDiv);
                 
-                // Add event listener to remove button
+                // Add event listener to remove question button
                 questionDiv.querySelector('.remove-question-btn').addEventListener('click', function() {
-                    questionDiv.remove();
-                    updateQuestionNumbers();
+                    if (confirm('آیا از حذف این سوال اطمینان دارید؟')) {
+                        questionDiv.remove();
+                        updateQuestionNumbers();
+                    }
+                });
+                
+                // Add event listener to add option button
+                const addOptionBtn = questionDiv.querySelector('.add-option-btn');
+                const optionsContainer = questionDiv.querySelector('.options-container');
+                const optionsCountEl = questionDiv.querySelector('.options-count span');
+                
+                addOptionBtn.addEventListener('click', function() {
+                    const optionContainers = optionsContainer.querySelectorAll('.option-container');
+                    const optionCount = optionContainers.length;
+                    
+                    if (optionCount < 10) {
+                        const newOption = document.createElement('div');
+                        newOption.className = 'flex items-center option-container';
+                        newOption.innerHTML = `
+                            <input type="radio" name="correct-option-${questionIndex}" value="${optionCount}"
+                                class="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600">
+                            <input type="text" placeholder="گزینه ${optionCount + 1}"
+                                class="option-text ml-2 flex-1 px-4 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <button type="button" class="remove-option-btn ml-2 text-red-500 hover:text-red-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        `;
+                        
+                        optionsContainer.appendChild(newOption);
+                        
+                        // Add event listener to remove option button
+                        newOption.querySelector('.remove-option-btn').addEventListener('click', function() {
+                            newOption.remove();
+                            updateOptionNumbers(questionDiv);
+                        });
+                        
+                        // Update option count
+                        optionsCountEl.textContent = optionContainers.length + 1;
+                        
+                        // Hide add option button if reached max
+                        if (optionContainers.length + 1 >= 10) {
+                            addOptionBtn.classList.add('hidden');
+                        }
+                    }
+                });
+                
+                // Add event listeners to existing remove option buttons
+                questionDiv.querySelectorAll('.remove-option-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        btn.closest('.option-container').remove();
+                        updateOptionNumbers(questionDiv);
+                    });
                 });
                 
                 // Add event listener to media type select
@@ -767,54 +1025,423 @@
                 });
             }
             
-            // Save quiz to localStorage
-            function saveQuiz(quiz) {
-                let quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
+            // Update option numbers within a question
+            function updateOptionNumbers(questionEl) {
+                const optionsContainer = questionEl.querySelector('.options-container');
+                const options = optionsContainer.querySelectorAll('.option-container');
+                const optionsCountEl = questionEl.querySelector('.options-count span');
+                const addOptionBtn = questionEl.querySelector('.add-option-btn');
                 
-                // Find if this quiz already exists
-                const existingIndex = quizzes.findIndex(q => q.id === quiz.id);
-                if (existingIndex !== -1) {
-                    quizzes[existingIndex] = quiz;
+                // Update count display
+                optionsCountEl.textContent = options.length;
+                
+                // Show/hide add option button
+                if (options.length < 10) {
+                    addOptionBtn.classList.remove('hidden');
                 } else {
-                    quizzes.push(quiz);
+                    addOptionBtn.classList.add('hidden');
                 }
                 
-                localStorage.setItem('quizzes', JSON.stringify(quizzes));
+                // Update radio values and option placeholders
+                options.forEach((option, idx) => {
+                    option.querySelector('input[type="radio"]').value = idx;
+                    option.querySelector('input[type="text"]').placeholder = `گزینه ${idx + 1}`;
+                });
+            }
+            
+            // Get media data from question element
+            function getMediaDataFromQuestion(questionEl) {
+                const mediaType = questionEl.querySelector('.media-type').value;
+                let mediaData = '';
+                
+                if (mediaType === 'text') {
+                    const textArea = questionEl.querySelector('.media-text');
+                    if (textArea) {
+                        mediaData = textArea.value;
+                    }
+                } else if (mediaType && mediaType !== '') {
+                    const preview = questionEl.querySelector('.media-preview');
+                    if (preview && !preview.classList.contains('hidden')) {
+                        if (mediaType === 'image') {
+                            const img = preview.querySelector('img');
+                            if (img) mediaData = img.src;
+                        } else if (mediaType === 'video') {
+                            const video = preview.querySelector('video');
+                            if (video) mediaData = video.src;
+                        } else if (mediaType === 'audio') {
+                            const audio = preview.querySelector('audio');
+                            if (audio) mediaData = audio.src;
+                        }
+                    }
+                }
+                
+                return { mediaType, mediaData };
+            }
+            
+            // Save quiz to database
+            function saveQuiz(quizData) {
+                try {
+                    db.run('BEGIN TRANSACTION');
+                    
+                    // Insert quiz
+                    db.run(
+                        'INSERT INTO quizzes (id, code, title, description, time, passingScore, maxAttempts, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        [
+                            quizData.id,
+                            quizData.code,
+                            quizData.title,
+                            quizData.description,
+                            quizData.time,
+                            quizData.passingScore,
+                            quizData.maxAttempts,
+                            quizData.createdAt
+                        ]
+                    );
+                    
+                    // Insert questions and options
+                    quizData.questions.forEach((question, qIndex) => {
+                        const questionId = generateUniqueId();
+                        
+                        // Insert question
+                        db.run(
+                            'INSERT INTO questions (id, quizId, text, mediaType, mediaData, position) VALUES (?, ?, ?, ?, ?, ?)',
+                            [
+                                questionId,
+                                quizData.id,
+                                question.text,
+                                question.mediaType || null,
+                                question.mediaData || null,
+                                qIndex
+                            ]
+                        );
+                        
+                        // Insert options
+                        question.options.forEach((option, oIndex) => {
+                            const optionId = generateUniqueId();
+                            db.run(
+                                'INSERT INTO options (id, questionId, text, isCorrect, position) VALUES (?, ?, ?, ?, ?)',
+                                [
+                                    optionId,
+                                    questionId,
+                                    option.text,
+                                    option.isCorrect ? 1 : 0,
+                                    oIndex
+                                ]
+                            );
+                        });
+                    });
+                    
+                    db.run('COMMIT');
+                    return true;
+                } catch (error) {
+                    db.run('ROLLBACK');
+                    console.error("Error saving quiz:", error);
+                    return false;
+                }
             }
             
             // Get quiz by ID
             function getQuizById(id) {
-                const quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
-                return quizzes.find(quiz => quiz.id === id);
+                try {
+                    // Get basic quiz info
+                    const quizStmt = db.prepare('SELECT * FROM quizzes WHERE id = ?');
+                    quizStmt.bind([id]);
+                    
+                    if (!quizStmt.step()) {
+                        quizStmt.free();
+                        return null;
+                    }
+                    
+                    const quizRow = quizStmt.getAsObject();
+                    quizStmt.free();
+                    
+                    const quiz = {
+                        id: quizRow.id,
+                        code: quizRow.code,
+                        title: quizRow.title,
+                        description: quizRow.description,
+                        time: quizRow.time,
+                        passingScore: quizRow.passingScore,
+                        maxAttempts: quizRow.maxAttempts,
+                        createdAt: quizRow.createdAt,
+                        questions: []
+                    };
+                    
+                    // Get questions
+                    const questionsStmt = db.prepare('SELECT * FROM questions WHERE quizId = ? ORDER BY position');
+                    questionsStmt.bind([id]);
+                    
+                    while (questionsStmt.step()) {
+                        const questionRow = questionsStmt.getAsObject();
+                        
+                        const question = {
+                            id: questionRow.id,
+                            text: questionRow.text,
+                            mediaType: questionRow.mediaType,
+                            mediaData: questionRow.mediaData,
+                            options: []
+                        };
+                        
+                        // Get options for this question
+                        const optionsStmt = db.prepare('SELECT * FROM options WHERE questionId = ? ORDER BY position');
+                        optionsStmt.bind([questionRow.id]);
+                        
+                        while (optionsStmt.step()) {
+                            const optionRow = optionsStmt.getAsObject();
+                            
+                            question.options.push({
+                                id: optionRow.id,
+                                text: optionRow.text,
+                                isCorrect: optionRow.isCorrect === 1
+                            });
+                        }
+                        
+                        optionsStmt.free();
+                        quiz.questions.push(question);
+                    }
+                    
+                    questionsStmt.free();
+                    
+                    // Get participants count
+                    const countStmt = db.prepare('SELECT COUNT(*) as count FROM participants WHERE quizId = ?');
+                    countStmt.bind([id]);
+                    countStmt.step();
+                    const participantsCount = countStmt.getAsObject().count;
+                    countStmt.free();
+                    
+                    quiz.participantsCount = participantsCount;
+                    
+                    return quiz;
+                } catch (error) {
+                    console.error("Error getting quiz by ID:", error);
+                    return null;
+                }
             }
             
             // Get quiz by code
             function getQuizByCode(code) {
-                const quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
-                return quizzes.find(quiz => quiz.code === code);
+                try {
+                    // Get quiz ID from code
+                    const stmt = db.prepare('SELECT id FROM quizzes WHERE code = ?');
+                    stmt.bind([code]);
+                    
+                    if (!stmt.step()) {
+                        stmt.free();
+                        return null;
+                    }
+                    
+                    const quizId = stmt.getAsObject().id;
+                    stmt.free();
+                    
+                    // Use getQuizById to get full quiz details
+                    return getQuizById(quizId);
+                } catch (error) {
+                    console.error("Error getting quiz by code:", error);
+                    return null;
+                }
+            }
+            
+            // Get participant attempts for a quiz
+            function getParticipantAttempts(quizId, participantName) {
+                try {
+                    const stmt = db.prepare('SELECT COUNT(*) as count FROM participants WHERE quizId = ? AND name = ?');
+                    stmt.bind([quizId, participantName]);
+                    stmt.step();
+                    const count = stmt.getAsObject().count;
+                    stmt.free();
+                    return count;
+                } catch (error) {
+                    console.error("Error getting participant attempts:", error);
+                    return 0;
+                }
             }
             
             // Save quiz result
             function saveQuizResult(quizId, result) {
-                let quiz = getQuizById(quizId);
-                if (!quiz) return;
-                
-                if (!quiz.results) {
-                    quiz.results = [];
+                try {
+                    db.run('BEGIN TRANSACTION');
+                    
+                    // Insert participant
+                    db.run(
+                        'INSERT INTO participants (id, quizId, name, score, totalQuestions, timeSpent, passed, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        [
+                            result.id,
+                            quizId,
+                            result.participantName,
+                            result.score,
+                            result.totalQuestions,
+                            result.timeSpent,
+                            result.passed ? 1 : 0,
+                            result.date
+                        ]
+                    );
+                    
+                    // Insert answers
+                    if (result.answers && result.answers.length > 0) {
+                        result.answers.forEach(answer => {
+                            if (answer.questionId && answer.optionId) {
+                                db.run(
+                                    'INSERT INTO answers (participantId, questionId, optionId) VALUES (?, ?, ?)',
+                                    [result.id, answer.questionId, answer.optionId]
+                                );
+                            }
+                        });
+                    }
+                    
+                    db.run('COMMIT');
+                    return true;
+                } catch (error) {
+                    db.run('ROLLBACK');
+                    console.error("Error saving quiz result:", error);
+                    return false;
                 }
-                
-                quiz.results.push(result);
-                saveQuiz(quiz);
+            }
+            
+            // Get quiz results
+            function getQuizResults(quizId) {
+                try {
+                    const results = [];
+                    
+                    const stmt = db.prepare('SELECT * FROM participants WHERE quizId = ? ORDER BY date DESC');
+                    stmt.bind([quizId]);
+                    
+                    while (stmt.step()) {
+                        const row = stmt.getAsObject();
+                        
+                        results.push({
+                            id: row.id,
+                            participantName: row.name,
+                            score: row.score,
+                            totalQuestions: row.totalQuestions,
+                            percentage: Math.round((row.score / row.totalQuestions) * 100),
+                            timeSpent: row.timeSpent,
+                            passed: row.passed === 1,
+                            date: row.date
+                        });
+                    }
+                    
+                    stmt.free();
+                    return results;
+                } catch (error) {
+                    console.error("Error getting quiz results:", error);
+                    return [];
+                }
+            }
+            
+            // Get all quizzes
+            function getAllQuizzes() {
+                try {
+                    const quizzes = [];
+                    
+                    const stmt = db.prepare('SELECT * FROM quizzes ORDER BY createdAt DESC');
+                    
+                    while (stmt.step()) {
+                        const row = stmt.getAsObject();
+                        
+                        // Get participants count
+                        const countStmt = db.prepare('SELECT COUNT(*) as count FROM participants WHERE quizId = ?');
+                        countStmt.bind([row.id]);
+                        countStmt.step();
+                        const participantsCount = countStmt.getAsObject().count;
+                        countStmt.free();
+                        
+                        // Get questions count
+                        const questionsStmt = db.prepare('SELECT COUNT(*) as count FROM questions WHERE quizId = ?');
+                        questionsStmt.bind([row.id]);
+                        questionsStmt.step();
+                        const questionsCount = questionsStmt.getAsObject().count;
+                        questionsStmt.free();
+                        
+                        quizzes.push({
+                            id: row.id,
+                            code: row.code,
+                            title: row.title,
+                            description: row.description,
+                            time: row.time,
+                            passingScore: row.passingScore,
+                            maxAttempts: row.maxAttempts,
+                            createdAt: row.createdAt,
+                            participantsCount: participantsCount,
+                            questionsCount: questionsCount
+                        });
+                    }
+                    
+                    stmt.free();
+                    return quizzes;
+                } catch (error) {
+                    console.error("Error getting all quizzes:", error);
+                    return [];
+                }
+            }
+            
+            // Delete quiz
+            function deleteQuiz(quizId) {
+                try {
+                    db.run('BEGIN TRANSACTION');
+                    
+                    // Delete quiz (foreign key constraints will handle deleting related data)
+                    db.run('DELETE FROM quizzes WHERE id = ?', [quizId]);
+                    
+                    db.run('COMMIT');
+                    return true;
+                } catch (error) {
+                    db.run('ROLLBACK');
+                    console.error("Error deleting quiz:", error);
+                    return false;
+                }
+            }
+            
+            // Export database
+            function exportDatabase() {
+                try {
+                    const data = db.export();
+                    const blob = new Blob([data], { type: 'application/octet-stream' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'Quiz.db';
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    return true;
+                } catch (error) {
+                    console.error("Error exporting database:", error);
+                    return false;
+                }
+            }
+            
+            // Format attempts display
+            function formatAttemptsDisplay(maxAttempts) {
+                if (maxAttempts === 0) {
+                    return "بدون محدودیت";
+                } else if (maxAttempts === 1) {
+                    return "فقط یک بار";
+                } else {
+                    return `${maxAttempts} بار`;
+                }
             }
             
             // Start quiz
             function startQuiz(quiz, participantName) {
                 currentQuiz = quiz;
                 currentQuestion = 0;
-                userAnswers = new Array(quiz.questions.length).fill(null);
+                userAnswers = [];
+                answeredQuestions = [];
                 quizStartTime = new Date();
                 quizDuration = quiz.time * 60; // Convert minutes to seconds
                 timeRemaining = quizDuration;
+                
+                // Initialize answers array
+                quiz.questions.forEach(question => {
+                    userAnswers.push({
+                        questionId: question.id,
+                        optionId: null
+                    });
+                });
                 
                 // Set quiz title
                 document.getElementById('quiz-title-header').textContent = quiz.title;
@@ -865,12 +1492,16 @@
                 const optionsContainer = document.getElementById('options-container');
                 optionsContainer.innerHTML = '';
                 
+                // Check if this question has been answered
+                const isAnswered = answeredQuestions.includes(index);
+                const userAnswer = userAnswers[index];
+                
                 // Add options
-                question.options.forEach((option, optionIndex) => {
+                question.options.forEach((option) => {
                     const optionDiv = document.createElement('div');
-                    const isSelected = userAnswers[index] === optionIndex;
+                    const isSelected = userAnswer.optionId === option.id;
                     
-                    optionDiv.className = `p-3 border ${isSelected ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700'} rounded-lg cursor-pointer option-item hover:bg-gray-50 dark:hover:bg-gray-700/50 transition duration-150`;
+                    optionDiv.className = `p-3 border ${isSelected ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700'} rounded-lg ${isAnswered ? '' : 'cursor-pointer option-container hover:bg-gray-50 dark:hover:bg-gray-700/50'} transition duration-150`;
                     optionDiv.innerHTML = `
                         <div class="flex items-center">
                             <div class="flex-shrink-0 mr-2">
@@ -878,32 +1509,35 @@
                                     ${isSelected ? '<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" fill-rule="evenodd"></path></svg>' : ''}
                                 </div>
                             </div>
-                            <span>${option}</span>
+                            <span>${option.text}</span>
                         </div>
                     `;
                     
-                    optionDiv.addEventListener('click', function() {
-                        // Set the user's answer
-                        userAnswers[index] = optionIndex;
-                        
-                        // Update the UI to show the selected option
-                        const options = optionsContainer.querySelectorAll('.option-item');
-                        options.forEach((opt, idx) => {
-                            if (idx === optionIndex) {
-                                opt.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
-                                opt.classList.remove('border-gray-200', 'dark:border-gray-700');
-                                opt.querySelector('div > div').classList.add('border-primary-500', 'bg-primary-500');
-                                opt.querySelector('div > div').classList.remove('border-gray-300', 'dark:border-gray-600');
-                                opt.querySelector('div > div').innerHTML = '<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" fill-rule="evenodd"></path></svg>';
-                            } else {
-                                opt.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
-                                opt.classList.add('border-gray-200', 'dark:border-gray-700');
-                                opt.querySelector('div > div').classList.remove('border-primary-500', 'bg-primary-500');
-                                opt.querySelector('div > div').classList.add('border-gray-300', 'dark:border-gray-600');
-                                opt.querySelector('div > div').innerHTML = '';
-                            }
+                    // Add click event listener if question is not already answered
+                    if (!isAnswered) {
+                        optionDiv.addEventListener('click', function() {
+                            // Set the user's answer
+                            userAnswers[index].optionId = option.id;
+                            
+                            // Update the UI to show the selected option
+                            const options = optionsContainer.querySelectorAll('div');
+                            options.forEach((opt, idx) => {
+                                if (opt === optionDiv) {
+                                    opt.classList.add('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
+                                    opt.classList.remove('border-gray-200', 'dark:border-gray-700');
+                                    opt.querySelector('div > div').classList.add('border-primary-500', 'bg-primary-500');
+                                    opt.querySelector('div > div').classList.remove('border-gray-300', 'dark:border-gray-600');
+                                    opt.querySelector('div > div').innerHTML = '<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" fill-rule="evenodd"></path></svg>';
+                                } else {
+                                    opt.classList.remove('border-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
+                                    opt.classList.add('border-gray-200', 'dark:border-gray-700');
+                                    opt.querySelector('div > div').classList.remove('border-primary-500', 'bg-primary-500');
+                                    opt.querySelector('div > div').classList.add('border-gray-300', 'dark:border-gray-600');
+                                    opt.querySelector('div > div').innerHTML = '';
+                                }
+                            });
                         });
-                    });
+                    }
                     
                     optionsContainer.appendChild(optionDiv);
                 });
@@ -951,9 +1585,16 @@
                 
                 // Calculate score
                 let score = 0;
-                userAnswers.forEach((answer, index) => {
-                    if (answer === currentQuiz.questions[index].correctAnswer) {
-                        score++;
+                
+                // Find correct options and calculate score
+                currentQuiz.questions.forEach((question, index) => {
+                    const userAnswer = userAnswers[index];
+                    if (userAnswer.optionId) {
+                        // Find the selected option in the question
+                        const selectedOption = question.options.find(option => option.id === userAnswer.optionId);
+                        if (selectedOption && selectedOption.isCorrect) {
+                            score++;
+                        }
                     }
                 });
                 
@@ -972,7 +1613,6 @@
                     participantName: document.getElementById('participant-name').value,
                     score: score,
                     totalQuestions: currentQuiz.questions.length,
-                    percentage: percentage,
                     timeSpent: timeSpent,
                     passed: passed,
                     date: new Date().toISOString(),
@@ -980,10 +1620,12 @@
                 };
                 
                 // Save the result
-                saveQuizResult(currentQuiz.id, result);
-                
-                // Show results
-                showResults(result);
+                if (saveQuizResult(currentQuiz.id, result)) {
+                    // Show results
+                    showResults(result);
+                } else {
+                    showAlert("خطا در ذخیره نتیجه آزمون!", "error");
+                }
             }
             
             // Show results
@@ -1003,7 +1645,7 @@
                 // Set scores
                 document.getElementById('final-score').textContent = result.score;
                 document.getElementById('total-score').textContent = result.totalQuestions;
-                document.getElementById('score-percentage').textContent = result.percentage;
+                document.getElementById('score-percentage').textContent = Math.round((result.score / result.totalQuestions) * 100);
                 
                 // Set time spent
                 const minutes = Math.floor(result.timeSpent / 60);
@@ -1016,7 +1658,21 @@
                 
                 currentQuiz.questions.forEach((question, index) => {
                     const userAnswer = result.answers[index];
-                    const isCorrect = userAnswer === question.correctAnswer;
+                    let isCorrect = false;
+                    let selectedOption = null;
+                    let correctOption = null;
+                    
+                    // Find selected option and correct option
+                    if (userAnswer.optionId) {
+                        selectedOption = question.options.find(opt => opt.id === userAnswer.optionId);
+                        correctOption = question.options.find(opt => opt.isCorrect);
+                        
+                        if (selectedOption && correctOption) {
+                            isCorrect = selectedOption.id === correctOption.id;
+                        }
+                    } else {
+                        correctOption = question.options.find(opt => opt.isCorrect);
+                    }
                     
                     const questionDiv = document.createElement('div');
                     questionDiv.className = `p-4 border ${isCorrect ? 'border-green-200 dark:border-green-800' : 'border-red-200 dark:border-red-800'} rounded-lg`;
@@ -1048,23 +1704,23 @@
                                 <h4 class="font-bold text-gray-800 dark:text-white mb-2">سوال ${index + 1}: ${question.text}</h4>
                                 ${mediaHTML}
                                 <div class="space-y-2 mb-2">
-                                    ${question.options.map((option, optIndex) => `
+                                    ${question.options.map(option => `
                                         <div class="flex items-center">
                                             <div class="w-4 h-4 mr-2 rounded-full ${
-                                                optIndex === question.correctAnswer ? 'bg-green-500 dark:bg-green-400' : 
-                                                (optIndex === userAnswer && optIndex !== question.correctAnswer) ? 'bg-red-500 dark:bg-red-400' : 
+                                                option.isCorrect ? 'bg-green-500 dark:bg-green-400' : 
+                                                (selectedOption && option.id === selectedOption.id) ? 'bg-red-500 dark:bg-red-400' : 
                                                 'bg-gray-200 dark:bg-gray-700'
                                             }"></div>
                                             <span class="${
-                                                optIndex === question.correctAnswer ? 'font-medium text-green-600 dark:text-green-400' : 
-                                                (optIndex === userAnswer && optIndex !== question.correctAnswer) ? 'font-medium text-red-600 dark:text-red-400' : 
+                                                option.isCorrect ? 'font-medium text-green-600 dark:text-green-400' : 
+                                                (selectedOption && option.id === selectedOption.id) ? 'font-medium text-red-600 dark:text-red-400' : 
                                                 'text-gray-600 dark:text-gray-400'
-                                            }">${option}</span>
+                                            }">${option.text}</span>
                                         </div>
                                     `).join('')}
                                 </div>
                                 <div class="text-sm text-gray-500 dark:text-gray-400">
-                                    ${isCorrect ? 'پاسخ صحیح است' : `پاسخ صحیح: ${question.options[question.correctAnswer]}`}
+                                    ${isCorrect ? 'پاسخ صحیح است' : `پاسخ صحیح: ${correctOption ? correctOption.text : 'بدون پاسخ'}`}
                                 </div>
                             </div>
                         </div>
@@ -1085,14 +1741,14 @@
                 // Reset form
                 document.getElementById('quiz-form').reset();
                 
-                // Add first question
+                // Add first question with 4 default options
                 addQuestion();
             }
             
             // List user's quizzes
             function listQuizzes() {
                 const quizzesList = document.getElementById('quizzes-list');
-                const quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
+                const quizzes = getAllQuizzes();
                 
                 // Show no quizzes message if there are no quizzes
                 if (quizzes.length === 0) {
@@ -1107,17 +1763,15 @@
                 quizzesList.innerHTML = '';
                 
                 // Add each quiz to the list
-                quizzes.forEach((quiz, index) => {
+                quizzes.forEach(quiz => {
                     const quizDiv = document.createElement('div');
                     quizDiv.className = 'bg-white dark:bg-gray-700 rounded-lg shadow p-4 flex flex-col md:flex-row items-center justify-between';
-                    
-                    const participantsCount = quiz.results ? quiz.results.length : 0;
                     
                     quizDiv.innerHTML = `
                         <div class="mb-4 md:mb-0">
                             <h3 class="text-lg font-bold text-gray-800 dark:text-white">${quiz.title}</h3>
                             <p class="text-sm text-gray-600 dark:text-gray-400">کد: ${quiz.code} | تاریخ ایجاد: ${formatDate(quiz.createdAt)}</p>
-                            <p class="text-sm text-gray-600 dark:text-gray-400">تعداد سوالات: ${quiz.questions.length} | شرکت‌کنندگان: ${participantsCount}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">تعداد سوالات: ${quiz.questionsCount} | شرکت‌کنندگان: ${quiz.participantsCount}</p>
                         </div>
                         <div class="flex space-x-2 rtl:space-x-reverse">
                             <button class="view-quiz-btn bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded-lg text-sm" data-id="${quiz.id}">
@@ -1153,15 +1807,31 @@
                 quizzesList.querySelectorAll('.delete-quiz-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         const quizId = this.dataset.id;
-                        deleteQuiz(quizId);
+                        deleteQuizConfirm(quizId);
                     });
                 });
+            }
+            
+            // Delete quiz with confirmation
+            function deleteQuizConfirm(quizId) {
+                if (confirm('آیا از حذف این آزمون اطمینان دارید؟\nتمام اطلاعات آزمون و نتایج شرکت‌کنندگان حذف خواهد شد.')) {
+                    if (deleteQuiz(quizId)) {
+                        showAlert("آزمون با موفقیت حذف شد", "success");
+                        // Refresh the list
+                        listQuizzes();
+                    } else {
+                        showAlert("خطا در حذف آزمون", "error");
+                    }
+                }
             }
             
             // Show quiz details
             function showQuizDetails(quizId) {
                 const quiz = getQuizById(quizId);
-                if (!quiz) return;
+                if (!quiz) {
+                    showAlert("خطا در بارگذاری اطلاعات آزمون", "error");
+                    return;
+                }
                 
                 // Set quiz details
                 document.getElementById('quiz-details-title').textContent = quiz.title;
@@ -1170,27 +1840,32 @@
                 document.getElementById('quiz-details-questions-count').textContent = quiz.questions.length;
                 document.getElementById('quiz-details-time').textContent = quiz.time;
                 document.getElementById('quiz-details-passing').textContent = quiz.passingScore;
+                document.getElementById('quiz-details-attempts').textContent = formatAttemptsDisplay(quiz.maxAttempts);
                 document.getElementById('quiz-details-code').textContent = quiz.code;
                 
-                // Set share link
-                const shareLink = `${window.location.origin}${window.location.pathname}?quiz=${quiz.code}`;
-                document.getElementById('quiz-details-link').value = shareLink;
-                
                 // Set participants count
-                const participantsCount = quiz.results ? quiz.results.length : 0;
+                const participantsCount = quiz.participantsCount || 0;
                 document.getElementById('quiz-details-participants').textContent = participantsCount;
+                
+                // Set current quiz ID for buttons
+                document.getElementById('share-quiz-btn').dataset.id = quiz.id;
+                document.getElementById('export-quiz-btn').dataset.id = quiz.id;
+                document.getElementById('delete-quiz-from-details-btn').dataset.id = quiz.id;
                 
                 // Show results table if there are participants
                 if (participantsCount > 0) {
                     document.getElementById('no-participants').classList.add('hidden');
                     document.getElementById('results-table').classList.remove('hidden');
                     
+                    // Get quiz results
+                    const results = getQuizResults(quiz.id);
+                    
                     // Clear the table body
                     const tableBody = document.getElementById('results-table-body');
                     tableBody.innerHTML = '';
                     
                     // Add each participant to the table
-                    quiz.results.forEach((result, index) => {
+                    results.forEach((result, index) => {
                         const row = document.createElement('tr');
                         row.className = index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700';
                         
@@ -1221,17 +1896,16 @@
             // Show share view
             function showShareView(quizId) {
                 const quiz = getQuizById(quizId);
-                if (!quiz) return;
+                if (!quiz) {
+                    showAlert("خطا در بارگذاری اطلاعات آزمون", "error");
+                    return;
+                }
                 
                 // Set quiz title
                 document.getElementById('share-quiz-title').textContent = quiz.title;
                 
                 // Set quiz code
                 document.getElementById('share-quiz-code').textContent = quiz.code;
-                
-                // Set share link
-                const shareLink = `${window.location.origin}${window.location.pathname}?quiz=${quiz.code}`;
-                document.getElementById('share-quiz-link').value = shareLink;
                 
                 // Set view quiz details button
                 document.getElementById('view-quiz-details-btn').dataset.id = quiz.id;
@@ -1240,93 +1914,38 @@
                 switchView('share-view');
             }
             
-            // Delete quiz
-            function deleteQuiz(quizId) {
-                if (!confirm('آیا از حذف این آزمون اطمینان دارید؟')) return;
-                
-                let quizzes = JSON.parse(localStorage.getItem('quizzes') || '[]');
-                quizzes = quizzes.filter(quiz => quiz.id !== quizId);
-                localStorage.setItem('quizzes', JSON.stringify(quizzes));
-                
-                // Refresh the list
-                listQuizzes();
-                
-                // Show success message
-                showAlert('آزمون با موفقیت حذف شد', 'success');
-            }
-            
-            // Check for quiz code in URL
-            function checkUrlForQuizCode() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const quizCode = urlParams.get('quiz');
-                
-                if (quizCode) {
-                    // Switch to take quiz view
-                    switchView('take-quiz-view');
-                    
-                    // Set the quiz code
-                    document.getElementById('quiz-code').value = quizCode;
-                    
-                    // Find the quiz
-                    const quiz = getQuizByCode(quizCode);
-                    if (quiz) {
-                        // Show quiz details
-                        showQuizInfo(quiz);
-                    } else {
-                        showAlert('آزمون مورد نظر یافت نشد', 'error');
-                    }
-                }
-            }
-            
-            // Show quiz info
+            // Show quiz info for taking quiz
             function showQuizInfo(quiz) {
                 document.getElementById('quiz-info-title').textContent = quiz.title;
                 document.getElementById('quiz-info-description').textContent = quiz.description;
                 document.getElementById('quiz-info-questions').querySelector('span').textContent = quiz.questions.length;
                 document.getElementById('quiz-info-time').querySelector('span').textContent = quiz.time;
                 document.getElementById('quiz-info-passing').querySelector('span').textContent = quiz.passingScore;
+                document.getElementById('quiz-info-attempts').querySelector('span').textContent = formatAttemptsDisplay(quiz.maxAttempts);
                 
                 document.getElementById('quiz-details').classList.remove('hidden');
-                document.getElementById('start-quiz-btn').disabled = !document.getElementById('participant-name').value;
-            }
-            
-            // Get media data from question elements
-            function getMediaDataFromQuestion(questionEl) {
-                const mediaType = questionEl.querySelector('.media-type').value;
-                let mediaData = '';
                 
-                if (mediaType === 'text') {
-                    const textArea = questionEl.querySelector('.media-text');
-                    if (textArea) {
-                        mediaData = textArea.value;
+                // Check if participant has reached the maximum number of attempts
+                const participantName = document.getElementById('participant-name').value;
+                if (participantName && quiz.maxAttempts > 0) {
+                    const attempts = getParticipantAttempts(quiz.id, participantName);
+                    
+                    if (attempts >= quiz.maxAttempts) {
+                        document.getElementById('attempts-error').classList.remove('hidden');
+                        document.getElementById('start-quiz-btn').disabled = true;
+                        return;
+                    } else {
+                        document.getElementById('attempts-error').classList.add('hidden');
                     }
-                } else if (mediaType && mediaType !== '') {
-                    const preview = questionEl.querySelector('.media-preview');
-                    if (preview && !preview.classList.contains('hidden')) {
-                        if (mediaType === 'image') {
-                            const img = preview.querySelector('img');
-                            if (img) mediaData = img.src;
-                        } else if (mediaType === 'video') {
-                            const video = preview.querySelector('video');
-                            if (video) mediaData = video.src;
-                        } else if (mediaType === 'audio') {
-                            const audio = preview.querySelector('audio');
-                            if (audio) mediaData = audio.src;
-                        }
-                    }
+                } else {
+                    document.getElementById('attempts-error').classList.add('hidden');
                 }
                 
-                return { mediaType, mediaData };
+                document.getElementById('start-quiz-btn').disabled = !document.getElementById('participant-name').value;
             }
             
             // Initialize the application
             function init() {
-                // Check for quiz code in URL
-                checkUrlForQuizCode();
-                
-                // Add first question to the quiz form
-                initQuizForm();
-                
                 // Event listeners for navigation
                 document.getElementById('create-quiz-btn').addEventListener('click', function() {
                     switchView('create-quiz-view');
@@ -1386,25 +2005,65 @@
                     const description = document.getElementById('quiz-description').value;
                     const time = parseInt(document.getElementById('quiz-time').value);
                     const passingScore = parseInt(document.getElementById('quiz-passing-score').value);
+                    const maxAttempts = parseInt(document.getElementById('quiz-attempts').value);
                     
                     // Get questions
                     const questions = [];
+                    let hasErrors = false;
+                    
                     document.querySelectorAll('.question-item').forEach(questionEl => {
                         const questionText = questionEl.querySelector('.question-text').value;
-                        const options = Array.from(questionEl.querySelectorAll('.option-text')).map(opt => opt.value);
-                        const correctAnswer = parseInt(questionEl.querySelector('input[type="radio"]:checked').value);
+                        
+                        if (!questionText) {
+                            showAlert("لطفاً متن تمام سوالات را وارد کنید", "error");
+                            hasErrors = true;
+                            return;
+                        }
                         
                         // Get media data
                         const { mediaType, mediaData } = getMediaDataFromQuestion(questionEl);
                         
+                        // Get options
+                        const options = [];
+                        let hasCorrectOption = false;
+                        
+                        questionEl.querySelectorAll('.option-container').forEach(optionEl => {
+                            const optionText = optionEl.querySelector('.option-text').value;
+                            const isCorrect = optionEl.querySelector('input[type="radio"]').checked;
+                            
+                            if (!optionText) {
+                                showAlert("لطفاً متن تمام گزینه‌ها را وارد کنید", "error");
+                                hasErrors = true;
+                                return;
+                            }
+                            
+                            options.push({
+                                text: optionText,
+                                isCorrect: isCorrect
+                            });
+                            
+                            if (isCorrect) {
+                                hasCorrectOption = true;
+                            }
+                        });
+                        
+                        if (!hasCorrectOption) {
+                            showAlert("لطفاً برای هر سوال یک گزینه صحیح انتخاب کنید", "error");
+                            hasErrors = true;
+                            return;
+                        }
+                        
                         questions.push({
                             text: questionText,
-                            options: options,
-                            correctAnswer: correctAnswer,
                             mediaType: mediaType,
-                            mediaData: mediaData
+                            mediaData: mediaData,
+                            options: options
                         });
                     });
+                    
+                    if (hasErrors) {
+                        return;
+                    }
                     
                     // Validate
                     if (questions.length === 0) {
@@ -1414,7 +2073,7 @@
                     
                     // Create quiz object
                     const quizId = generateUniqueId();
-                    const quizCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                    const quizCode = generateQuizCode();
                     
                     const quiz = {
                         id: quizId,
@@ -1423,19 +2082,19 @@
                         description: description,
                         time: time,
                         passingScore: passingScore,
-                        questions: questions,
+                        maxAttempts: maxAttempts,
                         createdAt: new Date().toISOString(),
-                        results: []
+                        questions: questions
                     };
                     
                     // Save the quiz
-                    saveQuiz(quiz);
-                    
-                    // Show success message
-                    showAlert('آزمون با موفقیت ساخته شد', 'success');
-                    
-                    // Show share view
-                    showShareView(quizId);
+                    if (saveQuiz(quiz)) {
+                        showAlert('آزمون با موفقیت ساخته شد', 'success');
+                        // Show share view
+                        showShareView(quizId);
+                    } else {
+                        showAlert('خطا در ذخیره آزمون!', 'error');
+                    }
                 });
                 
                 // Find quiz button
@@ -1456,6 +2115,24 @@
                 
                 // Participant name input
                 document.getElementById('participant-name').addEventListener('input', function() {
+                    const quizCode = document.getElementById('quiz-code').value;
+                    if (quizCode) {
+                        const quiz = getQuizByCode(quizCode);
+                        if (quiz) {
+                            // Check attempts limit
+                            if (quiz.maxAttempts > 0) {
+                                const attempts = getParticipantAttempts(quiz.id, this.value);
+                                if (attempts >= quiz.maxAttempts) {
+                                    document.getElementById('attempts-error').classList.remove('hidden');
+                                    document.getElementById('start-quiz-btn').disabled = true;
+                                    return;
+                                } else {
+                                    document.getElementById('attempts-error').classList.add('hidden');
+                                }
+                            }
+                        }
+                    }
+                    
                     document.getElementById('start-quiz-btn').disabled = !this.value;
                 });
                 
@@ -1475,11 +2152,21 @@
                     }
                     
                     const quiz = getQuizByCode(quizCode);
-                    if (quiz) {
-                        startQuiz(quiz, participantName);
-                    } else {
+                    if (!quiz) {
                         showAlert('آزمون مورد نظر یافت نشد', 'error');
+                        return;
                     }
+                    
+                    // Check attempts limit
+                    if (quiz.maxAttempts > 0) {
+                        const attempts = getParticipantAttempts(quiz.id, participantName);
+                        if (attempts >= quiz.maxAttempts) {
+                            showAlert('شما قبلاً در این آزمون شرکت کرده‌اید و به حداکثر تعداد دفعات مجاز رسیده‌اید.', 'error');
+                            return;
+                        }
+                    }
+                    
+                    startQuiz(quiz, participantName);
                 });
                 
                 // Previous question button
@@ -1492,6 +2179,11 @@
                 
                 // Next question button
                 document.getElementById('next-question-btn').addEventListener('click', function() {
+                    // Mark current question as answered if an option is selected
+                    if (userAnswers[currentQuestion].optionId && !answeredQuestions.includes(currentQuestion)) {
+                        answeredQuestions.push(currentQuestion);
+                    }
+                    
                     if (currentQuestion < currentQuiz.questions.length - 1) {
                         currentQuestion++;
                         showQuestion(currentQuestion);
@@ -1506,36 +2198,78 @@
                     showQuizDetails(quizId);
                 });
                 
-                // Copy link buttons
-                document.getElementById('copy-link-btn').addEventListener('click', function() {
-                    const linkInput = document.getElementById('quiz-details-link');
-                    linkInput.select();
-                    document.execCommand('copy');
-                    showAlert('لینک کپی شد', 'success');
-                });
-                
-                document.getElementById('copy-share-link-btn').addEventListener('click', function() {
-                    const linkInput = document.getElementById('share-quiz-link');
-                    linkInput.select();
-                    document.execCommand('copy');
-                    showAlert('لینک کپی شد', 'success');
-                });
-                
+                // Copy code buttons
                 document.getElementById('copy-code-btn').addEventListener('click', function() {
                     const code = document.getElementById('share-quiz-code').textContent;
                     navigator.clipboard.writeText(code).then(function() {
-                        showAlert('کد کپی شد', 'success');
+                        showAlert('کد آزمون کپی شد', 'success');
+                    }).catch(function() {
+                        // Fallback for browsers that don't support clipboard API
+                        const tempInput = document.createElement('input');
+                        tempInput.value = code;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tempInput);
+                        showAlert('کد آزمون کپی شد', 'success');
                     });
+                });
+                
+                document.getElementById('copy-code-from-details-btn').addEventListener('click', function() {
+                    const code = document.getElementById('quiz-details-code').textContent;
+                    navigator.clipboard.writeText(code).then(function() {
+                        showAlert('کد آزمون کپی شد', 'success');
+                    }).catch(function() {
+                        // Fallback
+                        const tempInput = document.createElement('input');
+                        tempInput.value = code;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tempInput);
+                        showAlert('کد آزمون کپی شد', 'success');
+                    });
+                });
+                
+                // Share quiz button (from details view)
+                document.getElementById('share-quiz-btn').addEventListener('click', function() {
+                    const quizId = this.dataset.id;
+                    showShareView(quizId);
+                });
+                
+                // Export database button
+                document.getElementById('export-quiz-btn').addEventListener('click', function() {
+                    if (exportDatabase()) {
+                        showAlert('دیتابیس با موفقیت دانلود شد', 'success');
+                    } else {
+                        showAlert('خطا در دانلود دیتابیس', 'error');
+                    }
+                });
+                
+                // Delete quiz button (from details view)
+                document.getElementById('delete-quiz-from-details-btn').addEventListener('click', function() {
+                    const quizId = this.dataset.id;
+                    deleteQuizConfirm(quizId);
                 });
                 
                 // Share results button
                 document.getElementById('share-results-btn').addEventListener('click', function() {
-                    showAlert('نتیجه آزمون کپی شد', 'success');
+                    const resultText = `نتیجه آزمون: ${document.getElementById('final-score').textContent} از ${document.getElementById('total-score').textContent} (${document.getElementById('score-percentage').textContent}%)`;
+                    
+                    navigator.clipboard.writeText(resultText).then(function() {
+                        showAlert('نتیجه آزمون کپی شد', 'success');
+                    }).catch(function() {
+                        // Fallback
+                        const tempInput = document.createElement('input');
+                        tempInput.value = resultText;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tempInput);
+                        showAlert('نتیجه آزمون کپی شد', 'success');
+                    });
                 });
             }
-            
-            // Initialize the app
-            init();
         });
     </script>
 </body>
